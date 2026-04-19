@@ -1,0 +1,641 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+#define P  11
+#define OV 50
+#define BL 6
+#define NL 30
+#define TL 40
+#define FW 10
+
+typedef struct {
+    char  name[NL];
+    int   r;
+    int   b;
+    int   four;
+    int   six;
+    int   out;
+    char  how[60];
+    float sr;
+} Bat;
+
+typedef struct {
+    char  name[NL];
+    int   ov;
+    int   bl;
+    int   rg;
+    int   wk;
+    int   md;
+    int   nb;
+    int   wd;
+    float eco;
+} Bowl;
+
+typedef struct {
+    int  ov;
+    int  bl;
+    int  sc;
+    int  wk;
+    char bat[NL];
+    char how[40];
+} Fow;
+
+typedef struct {
+    char tname[TL];
+    int  runs;
+    int  wk;
+    int  tb;
+    int  tlb;
+    int  ewd;
+    int  enb;
+    int  eby;
+    int  elb;
+    Bat  bt[P];
+    Bowl bw[P];
+    Fow  fw[FW];
+    int  fc;
+    int  ov;
+    int  bl;
+    int  done;
+} Inn;
+
+typedef struct {
+    char t1[TL];
+    char t2[TL];
+    int  tov;
+    int  tw;
+    int  tc;
+    Inn  in[2];
+} Match;
+
+Match M;
+
+void cls() {
+    #ifdef _WIN32
+        system("cls");
+    #else
+        system("clear");
+    #endif
+}
+
+void line(char c, int n) {
+    for (int i = 0; i < n; i++) printf("%c", c);
+    printf("\n");
+}
+
+void head(const char *t) {
+    line('=', 60);
+    printf("  %s\n", t);
+    line('=', 60);
+}
+
+float ovdec(int o, int b) {
+    return (float)o + (float)b / 10.0f;
+}
+
+void ovstr(int tb, char *buf) {
+    int o = tb / 6;
+    int b = tb % 6;
+    sprintf(buf, "%d.%d", o, b);
+}
+
+float crr(int r, int o, int b) {
+    float t = (float)o + (float)b / 6.0f;
+    if (t < 0.01f) return 0.0f;
+    return (float)r / t;
+}
+
+float rrr(int tgt, int sc, int tov, int od, int bd) {
+    int rn = tgt - sc;
+    float ol = (float)(tov - od) - (float)bd / 6.0f;
+    if (ol <= 0.0f) return 999.99f;
+    return (float)rn / ol;
+}
+
+int proj(int r, int o, int b, int wk, int tov) {
+    float tf = (float)o + (float)b / 6.0f;
+    if (tf < 0.01f) return 0;
+    float cr = (float)r / tf;
+    float wf = 1.0f - (float)wk * 0.035f;
+    if (wf < 0.4f) wf = 0.4f;
+    return (int)(cr * tov * wf);
+}
+
+float nrr(int rf, float of, int ra, float oa) {
+    if (of < 0.01f || oa < 0.01f) return 0.0f;
+    return (rf / of) - (ra / oa);
+}
+
+void setup() {
+    head("MATCH SETUP");
+    printf("Enter Team 1 Name: ");
+    scanf(" %[^\n]", M.t1);
+    printf("Enter Team 2 Name: ");
+    scanf(" %[^\n]", M.t2);
+    printf("Total Overs (e.g. 20 / 50): ");
+    scanf("%d", &M.tov);
+
+    printf("\nToss won by (1=%s / 2=%s): ", M.t1, M.t2);
+    scanf("%d", &M.tw);
+    printf("Choose to (1=Bat / 2=Field): ");
+    scanf("%d", &M.tc);
+
+    int bf;
+    if (M.tc == 1)
+        bf = M.tw;
+    else
+        bf = (M.tw == 1) ? 2 : 1;
+
+    strcpy(M.in[0].tname, (bf == 1) ? M.t1 : M.t2);
+    strcpy(M.in[1].tname, (bf == 1) ? M.t2 : M.t1);
+}
+
+void getplayers(int n) {
+    Inn *in = &M.in[n];
+    printf("\n--- Enter Batting Order for %s ---\n", in->tname);
+    for (int i = 0; i < P; i++) {
+        printf("  Player %2d: ", i + 1);
+        scanf(" %[^\n]", in->bt[i].name);
+        in->bt[i].r    = 0;
+        in->bt[i].b    = 0;
+        in->bt[i].four = 0;
+        in->bt[i].six  = 0;
+        in->bt[i].out  = 0;
+        strcpy(in->bt[i].how, "not out");
+    }
+    printf("\n--- Enter Bowling Squad for %s ---\n",
+           (n == 0) ? M.in[1].tname : M.in[0].tname);
+    for (int i = 0; i < P; i++) {
+        printf("  Bowler %2d: ", i + 1);
+        scanf(" %[^\n]", in->bw[i].name);
+        in->bw[i].ov = 0;
+        in->bw[i].bl = 0;
+        in->bw[i].rg = 0;
+        in->bw[i].wk = 0;
+        in->bw[i].md = 0;
+        in->bw[i].nb = 0;
+        in->bw[i].wd = 0;
+    }
+}
+
+void showlive(int n, int tgt) {
+    Inn *in = &M.in[n];
+    char os[10];
+    ovstr(in->ov * 6 + in->bl, os);
+
+    float cr = crr(in->runs, in->ov, in->bl);
+    int ps = proj(in->runs, in->ov, in->bl, in->wk, M.tov);
+
+    line('-', 60);
+    printf("  %-20s  %d/%d  (%.1f ov)\n",
+           in->tname, in->runs, in->wk, ovdec(in->ov, in->bl));
+    line('-', 60);
+
+    int ex = in->ewd + in->enb + in->eby + in->elb;
+    printf("  Extras: %d (W:%d NB:%d B:%d LB:%d)\n",
+           ex, in->ewd, in->enb, in->eby, in->elb);
+    printf("  CRR: %.2f", cr);
+
+    if (n == 1 && tgt > 0) {
+        float rr = rrr(tgt, in->runs, M.tov, in->ov, in->bl);
+        int nd = tgt - in->runs;
+        int ol = M.tov - in->ov;
+        printf("  |  RRR: %.2f  |  Need: %d off %d ov", rr, nd, ol);
+    } else {
+        printf("  |  Projected: %d", ps);
+    }
+    printf("\n");
+    line('-', 60);
+}
+
+void showbat(int n) {
+    Inn *in = &M.in[n];
+    head("BATTING SCORECARD");
+    printf("  %-3s %-20s %-12s %4s %4s %3s %3s %6s\n",
+           "No.", "Batsman", "Dismissal", "R", "B", "4s", "6s", "SR");
+    line('-', 60);
+    for (int i = 0; i < P; i++) {
+        Bat *bt = &in->bt[i];
+        if (bt->b > 0 || bt->out) {
+            float sr = (bt->b > 0) ? (float)bt->r / bt->b * 100.0f : 0.0f;
+            printf("  %-3d %-20s %-12s %4d %4d %3d %3d %6.2f\n",
+                   i+1, bt->name, bt->how, bt->r, bt->b, bt->four, bt->six, sr);
+        }
+    }
+    line('-', 60);
+    int ex = in->ewd + in->enb + in->eby + in->elb;
+    char os[10];
+    ovstr(in->ov * 6 + in->bl, os);
+    printf("  Extras: %d (W:%d NB:%d B:%d LB:%d)\n",
+           ex, in->ewd, in->enb, in->eby, in->elb);
+    printf("  TOTAL: %d/%d  (%s overs)\n", in->runs, in->wk, os);
+}
+
+void showbowl(int n) {
+    Inn *in = &M.in[n];
+    head("BOWLING SCORECARD");
+    printf("  %-20s %6s %3s %4s %3s %6s\n",
+           "Bowler", "Overs", "M", "Runs", "Wkt", "Econ");
+    line('-', 60);
+    for (int i = 0; i < P; i++) {
+        Bowl *bw = &in->bw[i];
+        if (bw->ov > 0 || bw->bl > 0) {
+            float ec = 0.0f;
+            float tv = (float)bw->ov + (float)bw->bl / 6.0f;
+            if (tv > 0.01f) ec = (float)bw->rg / tv;
+            printf("  %-20s %3d.%d  %3d %4d %3d %6.2f\n",
+                   bw->name, bw->ov, bw->bl, bw->md, bw->rg, bw->wk, ec);
+        }
+    }
+    line('-', 60);
+}
+
+void showfow(int n) {
+    Inn *in = &M.in[n];
+    if (in->fc == 0) return;
+    printf("\n  FALL OF WICKETS:\n  ");
+    for (int i = 0; i < in->fc; i++) {
+        Fow *fw = &in->fw[i];
+        printf("%d-%d (%s, %d.%d ov)  ",
+               i+1, fw->sc, fw->bat, fw->ov, fw->bl);
+        if ((i+1) % 3 == 0) printf("\n  ");
+    }
+    printf("\n");
+}
+
+void play(int n, int tgt) {
+    Inn *in = &M.in[n];
+    in->runs = 0;
+    in->wk   = 0;
+    in->ov   = 0;
+    in->bl   = 0;
+    in->ewd  = in->enb = in->eby = in->elb = 0;
+    in->fc   = 0;
+    in->done = 0;
+
+    int s = 0, ns = 1, nb = 2;
+    int cb = -1;
+    int ovr = 0;
+    char inp[10];
+    char dtype[40];
+
+    printf("\n");
+    head("INNINGS START");
+    printf("  %s batting\n", in->tname);
+    printf("\n  Ball codes:\n");
+    printf("  0-6 = runs  |  W = wicket  |  Wd = wide  |  Nb = no-ball\n");
+    printf("  B  = bye    |  Lb = leg bye  |  Done = end innings\n\n");
+
+    while (in->wk < 10 && in->ov < M.tov) {
+        printf("\n  --- Over %d ---\n", in->ov + 1);
+        printf("  Enter bowler number (1-11): ");
+        int bn; scanf("%d", &bn); bn--;
+        if (bn < 0 || bn >= P) bn = 0;
+        cb = bn;
+        ovr = 0;
+        in->bl = 0;
+
+        int lb = 0;
+        while (lb < BL) {
+            showlive(n, tgt);
+            printf("  Striker : %s (%d off %d)\n",
+                   in->bt[s].name, in->bt[s].r, in->bt[s].b);
+            printf("  Non-str : %s\n", in->bt[ns].name);
+            printf("  Bowler  : %s\n", in->bw[cb].name);
+            printf("  Ball %d.%d >> ", in->ov + 1, lb + 1);
+            scanf("%s", inp);
+
+            if (strcasecmp(inp, "done") == 0) {
+                in->done = 1;
+                goto end;
+            }
+
+            if (strcasecmp(inp, "wd") == 0) {
+                int wr = 1;
+                printf("  Wide runs? (1 default): ");
+                char tmp[5]; scanf("%s", tmp);
+                if (tmp[0] >= '1' && tmp[0] <= '9') wr = tmp[0] - '0';
+                in->runs += wr;
+                in->ewd  += wr;
+                in->bw[cb].rg += wr;
+                in->bw[cb].wd++;
+                ovr += wr;
+                printf("  Wide! +%d\n", wr);
+                continue;
+            }
+
+            if (strcasecmp(inp, "nb") == 0) {
+                int nr = 0;
+                printf("  Bat runs off no-ball: ");
+                scanf("%d", &nr);
+                in->runs += nr + 1;
+                in->enb  += 1;
+                in->bt[s].r += nr;
+                in->bt[s].b++;
+                if (nr == 4) in->bt[s].four++;
+                if (nr == 6) in->bt[s].six++;
+                in->bw[cb].rg += nr + 1;
+                in->bw[cb].nb++;
+                ovr += nr + 1;
+                printf("  No Ball! Bat: %d  Total: +%d\n", nr, nr+1);
+                continue;
+            }
+
+            if (strcasecmp(inp, "b") == 0) {
+                int br;
+                printf("  Bye runs: ");
+                scanf("%d", &br);
+                in->runs += br;
+                in->eby  += br;
+                in->bw[cb].rg += br;
+                in->bt[s].b++;
+                ovr += br;
+                lb++;
+                in->bl = lb;
+                if (br % 2 == 1) { int t = s; s = ns; ns = t; }
+                continue;
+            }
+
+            if (strcasecmp(inp, "lb") == 0) {
+                int lr;
+                printf("  Leg Bye runs: ");
+                scanf("%d", &lr);
+                in->runs += lr;
+                in->elb  += lr;
+                in->bw[cb].rg += lr;
+                in->bt[s].b++;
+                ovr += lr;
+                lb++;
+                in->bl = lb;
+                if (lr % 2 == 1) { int t = s; s = ns; ns = t; }
+                continue;
+            }
+
+            if (strcasecmp(inp, "w") == 0) {
+                printf("  How out (bowled/caught/lbw/runout/stumped/hitwicket): ");
+                scanf("%s", dtype);
+                char fd[NL] = "";
+                if (strcasecmp(dtype, "caught") == 0 ||
+                    strcasecmp(dtype, "runout") == 0 ||
+                    strcasecmp(dtype, "stumped") == 0) {
+                    printf("  Fielder name: ");
+                    scanf(" %[^\n]", fd);
+                }
+                int pr = 0;
+                printf("  Runs on this ball (0 usually): ");
+                scanf("%d", &pr);
+
+                in->bt[s].b++;
+                in->bt[s].r   += pr;
+                in->bt[s].out  = 1;
+                if (pr == 4) in->bt[s].four++;
+                if (pr == 6) in->bt[s].six++;
+
+                if (strlen(fd) > 0)
+                    sprintf(in->bt[s].how, "%s %s b %s", dtype, fd, in->bw[cb].name);
+                else
+                    sprintf(in->bt[s].how, "%s b %s", dtype, in->bw[cb].name);
+
+                in->runs += pr;
+                in->bw[cb].rg += pr;
+                in->bw[cb].wk++;
+                ovr += pr;
+                in->wk++;
+                lb++;
+                in->bl = lb;
+
+                if (in->fc < FW) {
+                    in->fw[in->fc].ov = in->ov + 1;
+                    in->fw[in->fc].bl = lb;
+                    in->fw[in->fc].sc = in->runs;
+                    strcpy(in->fw[in->fc].bat, in->bt[s].name);
+                    strcpy(in->fw[in->fc].how, dtype);
+                    in->fc++;
+                }
+
+                printf("  OUT! %s  Score: %d/%d\n", in->bt[s].how, in->runs, in->wk);
+
+                if (in->wk == 10) goto end;
+
+                s = nb++;
+                printf("  New batsman: %s\n", in->bt[s].name);
+                continue;
+            }
+
+            if (inp[0] >= '0' && inp[0] <= '6' && inp[1] == '\0') {
+                int r = inp[0] - '0';
+                in->bt[s].r += r;
+                in->bt[s].b++;
+                if (r == 4) in->bt[s].four++;
+                if (r == 6) in->bt[s].six++;
+                in->runs += r;
+                in->bw[cb].rg += r;
+                ovr += r;
+                lb++;
+                in->bl = lb;
+                if (r % 2 == 1) { int t = s; s = ns; ns = t; }
+                if (n == 1 && tgt > 0 && in->runs >= tgt) {
+                    printf("\n  TARGET ACHIEVED! %s WIN!\n", in->tname);
+                    in->done = 1;
+                    goto end;
+                }
+                continue;
+            }
+
+            printf("  Invalid input, try again.\n");
+        }
+
+        if (ovr == 0 && lb == 6)
+            in->bw[cb].md++;
+        in->bw[cb].ov++;
+        in->bw[cb].bl = 0;
+        in->bl = 0;
+        in->ov++;
+
+        int t = s; s = ns; ns = t;
+
+        printf("\n  End of over %d | Score: %d/%d\n", in->ov, in->runs, in->wk);
+    }
+
+end:
+    if (!in->done) in->done = 1;
+
+    for (int i = 0; i < P; i++) {
+        if (in->bt[i].b > 0)
+            in->bt[i].sr = (float)in->bt[i].r / in->bt[i].b * 100.0f;
+    }
+
+    showbat(n);
+    showfow(n);
+    showbowl(n);
+}
+
+void result() {
+    Inn *a = &M.in[0];
+    Inn *b = &M.in[1];
+
+    head("MATCH RESULT");
+
+    char o1[10], o2[10];
+    ovstr(a->ov * 6 + a->bl, o1);
+    ovstr(b->ov * 6 + b->bl, o2);
+
+    printf("  %-20s : %d/%d  (%s overs)\n", a->tname, a->runs, a->wk, o1);
+    printf("  %-20s : %d/%d  (%s overs)\n", b->tname, b->runs, b->wk, o2);
+    line('-', 60);
+
+    if (b->runs > a->runs)
+        printf("  RESULT: %s won by %d wicket(s)\n", b->tname, 10 - b->wk);
+    else if (a->runs > b->runs)
+        printf("  RESULT: %s won by %d run(s)\n", a->tname, a->runs - b->runs);
+    else
+        printf("  RESULT: MATCH TIED!\n");
+
+    line('-', 60);
+
+    float of1 = (float)a->ov + (float)a->bl / 6.0f;
+    float of2 = (float)b->ov + (float)b->bl / 6.0f;
+    if (of1 < 0.01f) of1 = (float)M.tov;
+    if (of2 < 0.01f) of2 = (float)M.tov;
+
+    float n1 = nrr(a->runs, of1, b->runs, of2);
+    float n2 = -n1;
+
+    printf("\n  NET RUN RATE (NRR):\n");
+    printf("  %-20s : %+.3f\n", a->tname, n1);
+    printf("  %-20s : %+.3f\n", b->tname, n2);
+    line('=', 60);
+}
+
+void savefile() {
+    char fn[60];
+    printf("\n  Enter filename (e.g. match.txt): ");
+    scanf("%s", fn);
+
+    FILE *fp = fopen(fn, "w");
+    if (!fp) { printf("  Error saving!\n"); return; }
+
+    fprintf(fp, "============================================================\n");
+    fprintf(fp, "         CRICKET MATCH SCORECARD\n");
+    fprintf(fp, "         %s  vs  %s\n", M.t1, M.t2);
+    fprintf(fp, "         %d-Over Match\n", M.tov);
+    fprintf(fp, "============================================================\n\n");
+
+    for (int n = 0; n < 2; n++) {
+        Inn *in = &M.in[n];
+        char os[10];
+        ovstr(in->ov * 6 + in->bl, os);
+        fprintf(fp, "--- %s Innings ---\n", in->tname);
+        fprintf(fp, "Total: %d/%d  (%s overs)\n\n", in->runs, in->wk, os);
+
+        fprintf(fp, "%-3s %-20s %-14s %4s %4s %3s %3s %6s\n",
+                "#", "Batsman", "Dismissal", "R", "B", "4s", "6s", "SR");
+        fprintf(fp, "-------------------------------------------------------------\n");
+        for (int i = 0; i < P; i++) {
+            Bat *bt = &in->bt[i];
+            if (bt->b > 0 || bt->out) {
+                float sr = bt->b > 0 ? (float)bt->r / bt->b * 100.0f : 0.0f;
+                fprintf(fp, "%-3d %-20s %-14s %4d %4d %3d %3d %6.2f\n",
+                        i+1, bt->name, bt->how, bt->r, bt->b, bt->four, bt->six, sr);
+            }
+        }
+
+        int ex = in->ewd + in->enb + in->eby + in->elb;
+        fprintf(fp, "\nExtras: %d (W:%d NB:%d B:%d LB:%d)\n\n",
+                ex, in->ewd, in->enb, in->eby, in->elb);
+
+        if (in->fc > 0) {
+            fprintf(fp, "Fall of Wickets:\n");
+            for (int i = 0; i < in->fc; i++) {
+                Fow *fw = &in->fw[i];
+                fprintf(fp, "  %d-%d (%s, %d.%d ov)\n",
+                        i+1, fw->sc, fw->bat, fw->ov, fw->bl);
+            }
+            fprintf(fp, "\n");
+        }
+
+        fprintf(fp, "%-20s %6s %3s %4s %3s %6s\n",
+                "Bowler", "Overs", "M", "Runs", "Wkt", "Econ");
+        fprintf(fp, "-------------------------------------------------------------\n");
+        for (int i = 0; i < P; i++) {
+            Bowl *bw = &in->bw[i];
+            if (bw->ov > 0 || bw->bl > 0) {
+                float ec = 0.0f;
+                float tv = (float)bw->ov + (float)bw->bl / 6.0f;
+                if (tv > 0.01f) ec = (float)bw->rg / tv;
+                fprintf(fp, "%-20s %3d.%d  %3d %4d %3d %6.2f\n",
+                        bw->name, bw->ov, bw->bl, bw->md, bw->rg, bw->wk, ec);
+            }
+        }
+        fprintf(fp, "\n\n");
+    }
+
+    Inn *a = &M.in[0];
+    Inn *b = &M.in[1];
+    fprintf(fp, "============================================================\n");
+    if (b->runs > a->runs)
+        fprintf(fp, "RESULT: %s won by %d wicket(s)\n", b->tname, 10 - b->wk);
+    else if (a->runs > b->runs)
+        fprintf(fp, "RESULT: %s won by %d run(s)\n", a->tname, a->runs - b->runs);
+    else
+        fprintf(fp, "RESULT: MATCH TIED!\n");
+
+    float of1 = (float)a->ov + (float)a->bl / 6.0f;
+    float of2 = (float)b->ov + (float)b->bl / 6.0f;
+    if (of1 < 0.01f) of1 = (float)M.tov;
+    if (of2 < 0.01f) of2 = (float)M.tov;
+    float n1 = nrr(a->runs, of1, b->runs, of2);
+    fprintf(fp, "\nNRR: %s = %+.3f | %s = %+.3f\n", a->tname, n1, b->tname, -n1);
+    fprintf(fp, "============================================================\n");
+
+    fclose(fp);
+    printf("  Saved to '%s'\n", fn);
+}
+
+int main() {
+    cls();
+    printf("\n");
+    line('*', 60);
+    printf("*%58s*\n", "");
+    printf("*%20s CRICKET SCORER %20s*\n", "", "");
+    printf("*%58s*\n", "");
+    printf("*%10s Microproject - C Programming (22226) %9s*\n", "", "");
+    printf("*%58s*\n", "");
+    line('*', 60);
+    printf("\n");
+
+    setup();
+
+    printf("\n");
+    head("1ST INNINGS SETUP");
+    printf("  Batting: %s\n  Bowling: %s\n", M.in[0].tname, M.in[1].tname);
+    getplayers(0);
+    play(0, 0);
+
+    int tgt = M.in[0].runs + 1;
+    printf("\n");
+    line('=', 60);
+    printf("  1st INNINGS COMPLETE\n");
+    printf("  %s scored: %d/%d\n", M.in[0].tname, M.in[0].runs, M.in[0].wk);
+    printf("  TARGET for %s: %d\n", M.in[1].tname, tgt);
+    line('=', 60);
+
+    printf("\n");
+    head("2ND INNINGS SETUP");
+    printf("  Batting: %s\n  Bowling: %s\n", M.in[1].tname, M.in[0].tname);
+    getplayers(1);
+    play(1, tgt);
+
+    result();
+
+    printf("\n  Save scorecard to file? (1=Yes / 0=No): ");
+    int sv; scanf("%d", &sv);
+    if (sv == 1) savefile();
+
+    printf("\n  Thank you for using Cricket Scorer!\n");
+    printf("  Microproject by: Prathmesh Mahajan at Government Polytechnic, Pune\n\n");
+
+    return 0;
+}
